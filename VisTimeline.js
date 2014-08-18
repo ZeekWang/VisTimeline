@@ -19,16 +19,17 @@
         var xAxisOrient, yAxisOrient;
         var xMin, xMax, yMin, yMax;
         var xScale, yScale;
-        var hasAxis;
-        var svg, group;
+        var hasAxis, hasBrush;
+        var svg, group, gpGraph, gpBrush;
         var data;
+        var brushEndCallback;
 
         init(userConfig);
-
 
         function init(userConfig) {
             container = null;
             hasAxis = true;
+            hasBrush = false;
             xAxisOrient = "bottom";
             yAxisOrient = "left";
             xMin = null;
@@ -66,13 +67,15 @@
             if (userConfig.yMax != null)
                 yMax = config.yMax = userConfig.yMax;
             if (userConfig.hasAxis != null)
-                config.hasAxis = userConfig.hasAxis;
+                hasAxis = config.hasAxis = userConfig.hasAxis;
+            if (userConfig.hasBrush != null)
+                hasBrush = config.hasBrush = userConfig.hasBrush;
             if (userConfig.containerSize != null)
                 containerSize = config.containerSize = userConfig.containerSize;
             if (userConfig.xAxisOrient != null) 
                 xAxisOrient = config.xAxisOrient = userConfig.xAxisOrient;
             if (userConfig.yAxisOrient != null) 
-                yAxisOrient = config.yAxisOrient = userConfig.yAxisOrient; 
+                yAxisOrient = config.yAxisOrient = userConfig.yAxisOrient;
 
             computeGraphSize();
             createSVG();
@@ -86,15 +89,27 @@
             computeData();
             if (hasAxis)
                 renderAxis();
+            gpGraph = group.append("g")
+                .attr("class", "VTL-graph");              
+            if (hasBrush)
+                addBrush();
+
             switch(graphType) {
                 case "curve":
                     renderCurveGraph();
                     break;
             }
+
         }
 
         TL.setData = function(userData) {
             data = userData;
+            return TL;
+        }
+
+        TL.setBrushEndCallback = function(func) {
+            brushEndCallback = func;
+            return TL;
         }
 
         function createSVG() {
@@ -108,7 +123,7 @@
         }
 
         function computeData() {
-            xScale = d3.scale.linear().domain([xMin, xMax]).range([0, graphSize.w]),
+            xScale = d3.scale.linear().domain([xMin, xMax]).range([0, graphSize.w]);
             yScale = d3.scale.linear().domain([yMin, yMax]).range([graphSize.h, 0]);
         }
 
@@ -116,15 +131,9 @@
             var xAxis = d3.svg.axis()
                 .scale(xScale)
                 .orient(xAxisOrient)
-                // .ticks(xTicks)
-                // .tickValues(xTickValues)
-                // .tickFormat(xTickFormat);
             var yAxis = d3.svg.axis()
                 .scale(yScale)
                 .orient(yAxisOrient)
-                // .ticks(yTicks)
-                // .tickValues(yTickValues)
-                // .tickFormat(yTickFormat);
 
             group.append("g")
                 .attr("class", "x axis VTL-axis")
@@ -146,13 +155,31 @@
                     .y1(line.y())
                     .y0(yScale(yMin));
 
-            group.append("path")
+            gpGraph.append("path")
                 .datum(data)
                 .attr("class", "line")
                 .attr("d", area);
         }
 
+        function addBrush() {
+            brush = d3.svg.brush()
+                .x(xScale)
+                .on("brushend", funcBrushEnd);
+            gpBrush = group.append("g")
+                .attr("class", "VTL-brush")
+                .call(brush);
+            gpBrush.selectAll("rect")
+                .attr("height", graphSize.h);
+            // gBrush.selectAll(".resize").append("path")
+            //     .attr("transform", "translate(0," +  graphSize.h / 2 + ")")
+            //     .attr("d", arc);  
 
+            function funcBrushEnd(x0, x1) {
+                extent = brush.extent();
+                if (brushEndCallback != null)
+                    brushEndCallback(extent[0], extent[1]);
+            }
+        }
 
 
         function computeGraphSize() {

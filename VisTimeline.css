@@ -1,0 +1,25 @@
+/*Axis*/
+.axis path,
+.axis line {
+    fill: none;
+    stroke: #888;
+    shape-rendering: crispEdges;
+}
+
+.axis text {
+	fill: #888;
+}
+
+
+/*Graph*/
+.VTL-graph path {
+	fill: rgb(107, 174, 214);
+}
+
+
+
+/*Brush*/
+.VTL-brush .extent {
+  fill-opacity: .1;
+  shape-rendering: crispEdges;
+}
