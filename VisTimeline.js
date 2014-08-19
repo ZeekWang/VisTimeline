@@ -17,19 +17,20 @@
             containerSize, containerSize, graphSize, 
             graphType;
         var xAxisOrient, yAxisOrient;
-        var xMin, xMax, yMin, yMax;
+        var xMin = null, xMax = null, yMin = null, yMax = null;
         var xScale, yScale;
-        var hasAxis, hasBrush;
+        var axisEnabled, brushEnabled;
         var svg, group, gpGraph, gpBrush;
         var data;
         var brushEndCallback;
+        var horizontalBandCount, horizontalHeight;
 
         init(userConfig);
 
         function init(userConfig) {
             container = null;
-            hasAxis = true;
-            hasBrush = false;
+            axisEnabled = true;
+            brushEnabled = false;
             xAxisOrient = "bottom";
             yAxisOrient = "left";
             xMin = null;
@@ -57,25 +58,32 @@
             graphType = config.graphType = userConfig.graphType;
 
             if (userConfig.margin != null) 
-                margin = config.margin = userConfig.margin;
+                margin = userConfig.margin;
             if (userConfig.xMin != null)
-                xMin = config.xMin = userConfig.xMin;
+                xMin = userConfig.xMin;
             if (userConfig.xMax != null)
-                xMax = config.xMax = userConfig.xMax;
+                xMax = userConfig.xMax;
             if (userConfig.yMin != null)
-                yMin = config.yMin = userConfig.yMin;
+                yMin = userConfig.yMin;
             if (userConfig.yMax != null)
-                yMax = config.yMax = userConfig.yMax;
-            if (userConfig.hasAxis != null)
-                hasAxis = config.hasAxis = userConfig.hasAxis;
-            if (userConfig.hasBrush != null)
-                hasBrush = config.hasBrush = userConfig.hasBrush;
+                yMax = userConfig.yMax;
+            if (userConfig.axisEnabled != null)
+                axisEnabled = userConfig.axisEnabled;
+            if (userConfig.brushEnabled != null)
+                brushEnabled = userConfig.brushEnabled;
             if (userConfig.containerSize != null)
-                containerSize = config.containerSize = userConfig.containerSize;
+                containerSize = userConfig.containerSize;
             if (userConfig.xAxisOrient != null) 
-                xAxisOrient = config.xAxisOrient = userConfig.xAxisOrient;
+                xAxisOrient = userConfig.xAxisOrient;
             if (userConfig.yAxisOrient != null) 
-                yAxisOrient = config.yAxisOrient = userConfig.yAxisOrient;
+                yAxisOrient = userConfig.yAxisOrient;
+            if (userConfig.horizontalBandCount != null) {
+                horizontalBandCount = userConfig.horizontalBandCount;
+                if (horizontalBandCount > 5) {
+                    console.log("VisTimeline Error: horizontalBandCount can not be large than 5");
+                    horizontalBandCount = 5;
+                }
+            }
 
             computeGraphSize();
             createSVG();
@@ -86,12 +94,13 @@
                 console.log("VisTimeline Error: The data is not set before rendering");
                 return false;
             }
-            computeData();
-            if (hasAxis)
+            processData();
+            if (axisEnabled)
                 renderAxis();
-            gpGraph = group.append("g")
+            gpGraph = group
+                .append("g")
                 .attr("class", "VTL-graph");              
-            if (hasBrush)
+            if (brushEnabled)
                 addBrush();
 
             switch(graphType) {
@@ -100,6 +109,11 @@
                     break;
             }
 
+            switch(graphType) {
+                case "horizontalLine":
+                    renderHorizontalLine();
+                    break;
+            }
         }
 
         TL.setData = function(userData) {
@@ -122,9 +136,38 @@
                 .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
         }
 
-        function computeData() {
+        function processData() {
+            if (xMin == null || xMax == null) {
+                tmpXMin = Number.MAX_VALUE;
+                tmpXMax = Number.MIN_VALUE;
+                for (var i = 0; i < data.length; i++) {
+                    if (tmpXMin > data[i].x)
+                        tmpXMin = data[i].x;
+                    if (tmpXMax < data[i].x)
+                        tmpXMax = data[i].x;
+                }
+                if (xMin == null)
+                    xMin = tmpXMin;
+                if (xMax == null)
+                    xMax = tmpXMax;
+            }
+            if (yMin == null || yMax == null) {
+                tmpYMin = Number.MAX_VALUE;
+                tmpYMax = Number.MIN_VALUE;
+                for (var i = 0; i < data.length; i++) {
+                    if (tmpYMin > data[i].y)
+                        tmpYMin = data[i].y;
+                    if (tmpYMax < data[i].y)
+                        tmpYMax = data[i].y;
+                }
+                if (yMin == null)
+                    yMin = tmpYMin;
+                if (yMax == null)
+                    yMax = tmpYMax;
+            }            
             xScale = d3.scale.linear().domain([xMin, xMax]).range([0, graphSize.w]);
-            yScale = d3.scale.linear().domain([yMin, yMax]).range([graphSize.h, 0]);
+            yScale = d3.scale.linear().domain([yMin, yMax]).range([graphSize.h, 0]);            
+
         }
 
         function renderAxis() {
@@ -136,11 +179,11 @@
                 .orient(yAxisOrient)
 
             group.append("g")
-                .attr("class", "x axis VTL-axis")
+                .attr("class", "VTL-axis")
                 .attr("transform", "translate(0," + graphSize.h + ")")
                 .call(xAxis);
             group.append("g")
-                .attr("class", "y axis VTL-axis")
+                .attr("class", "VTL-axis")
                 .attr("transform", "translate(0, 0)")
                 .call(yAxis);
         }
@@ -157,9 +200,59 @@
 
             gpGraph.append("path")
                 .datum(data)
-                .attr("class", "line")
+                .attr("class", "VTL-area")
                 .attr("d", area);
         }
+
+        function renderHorizontalLine() {
+            if (horizontalBandCount != null) {
+                tmpYScale = d3.scale.linear().domain([yMin, yMax]).range([graphSize.h * horizontalBandCount, 0]);
+            }
+            
+
+ 
+
+            var line = d3.svg.line()
+                .x(function(d) { return xScale(d.x); })
+                .y(function(d) { return tmpYScale(d.y); })
+
+            var area = d3.svg.area()
+                    .x(line.x())
+                    .y1(line.y())
+                    .y0(tmpYScale(yMin));
+
+            
+            for (var i = 0; i < horizontalBandCount; i++) {
+                var transY = graphSize.h * (horizontalBandCount - i - 1)
+                var clipId = randomString();
+                gpGraph.append("clipPath")
+                    .attr("id", "VTL-clip-" + clipId)
+                    .append("rect")
+                    .attr("width", graphSize.w)
+                    .attr("height", graphSize.h)
+                    .attr("x", 0)
+                    .attr("y", 0)
+                    // .attr("transform", "translate(0, " + 10 + ")")
+                    .attr("transform", "translate(0, " + transY + ")");
+                // var bgClipId = randomString();
+                // gpGraph.append("clipPath")
+                //     .attr("id", "VTL-clip-" + bgClipId)
+                //     .append("rect")
+                //     .attr("width", graphSize.cw)
+                //     .attr("height", graphSize.ch)
+                //     .attr("x", 0)
+                //     .attr("y", 0)
+                //     .attr("clip-path", "url(#VTL-clip-" + clipId + ")")
+                gpGraph.append("path")
+                    .datum(data)
+                    .attr("class", "VTL-hzt-area-" + i)
+                    .attr("d", area)
+                    .attr("transform", "translate(0, -" + transY + ")")
+                    // .attr("transform", "translate(0, -" + 10 + ")")
+                    .attr("clip-path", "url(#VTL-clip-" + clipId + ")")
+                    
+            }
+        }        
 
         function addBrush() {
             brush = d3.svg.brush()
@@ -185,7 +278,8 @@
         function computeGraphSize() {
             var width = $(container).width() - margin.left - margin.right,
                 height = $(container).height() - margin.top - margin.bottom;
-            graphSize = {w:width, h:height};
+            graphSize = {w:width, h:height, 
+                cw:$(container).width(), ch:$(container).height() };
         }
 
         return TL;
@@ -211,6 +305,18 @@
     
     function sqrt(value){
         return Math.sqrt(value);
+    }
+
+    function randomString(len) {
+        if (len == null || len < 16)
+            len = 16;
+        var chars = 'abcdefghijklmnopqrstuvwxyz0123456788';
+        var maxPos = chars.length;
+        var str = '';
+        for (i = 0; i < len; i++) {
+            str += chars.charAt(Math.floor(Math.random() * maxPos));
+        }
+        return str;
     }
 
     window['VTL'] = VTL;

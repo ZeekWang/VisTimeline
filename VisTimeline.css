@@ -1,22 +1,39 @@
 /*Axis*/
-.axis path,
-.axis line {
+.VTL-axis path,
+.VTL-axis line {
     fill: none;
     stroke: #888;
     shape-rendering: crispEdges;
 }
 
-.axis text {
+.VTL-axis text {
 	fill: #888;
 }
 
-
 /*Graph*/
-.VTL-graph path {
+.VTL-graph .VTL-area {
 	fill: rgb(107, 174, 214);
 }
 
+.VTL-graph .VTL-hzt-area-0 {
+	fill: #9ecae1;
+}
 
+.VTL-graph .VTL-hzt-area-1 {
+	fill: #6baed6;
+}
+
+.VTL-graph .VTL-hzt-area-2 {
+	fill: #4292c6;
+}
+
+.VTL-graph .VTL-hzt-area-3 {
+	fill: #2171b5;
+}
+
+.VTL-graph .VTL-hzt-area-4 {
+	fill: #084594;
+}
 
 /*Brush*/
 .VTL-brush .extent {
