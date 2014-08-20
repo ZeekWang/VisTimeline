@@ -19,8 +19,9 @@
         var xAxisOrient, yAxisOrient;
         var xMin = null, xMax = null, yMin = null, yMax = null;
         var xScale, yScale;
-        var axisEnabled, brushEnabled;
-        var svg, group, gpGraph, gpBrush;
+        var axisEnabled, brushEnabled, valueHintEnabled;
+        var xAxisEnabled, yAxisEnabled;
+        var svg, group, gpGraph, gpBrush, gpHint;
         var data;
         var brushEndCallback;
         var horizontalBandCount, horizontalHeight;
@@ -31,6 +32,9 @@
             container = null;
             axisEnabled = true;
             brushEnabled = false;
+            valueHintEnabled = false;
+            xAxisEnabled = true;
+            yAxisEnabled = true;
             xAxisOrient = "bottom";
             yAxisOrient = "left";
             xMin = null;
@@ -71,6 +75,12 @@
                 axisEnabled = userConfig.axisEnabled;
             if (userConfig.brushEnabled != null)
                 brushEnabled = userConfig.brushEnabled;
+            if (userConfig.valueHintEnabled != null)
+                valueHintEnabled = userConfig.valueHintEnabled;
+            if (userConfig.xAxisEnabled != null)
+                xAxisEnabled = userConfig.xAxisEnabled;
+            if (userConfig.yAxisEnabled != null)
+                yAxisEnabled = userConfig.yAxisEnabled;
             if (userConfig.containerSize != null)
                 containerSize = userConfig.containerSize;
             if (userConfig.xAxisOrient != null) 
@@ -99,20 +109,25 @@
                 renderAxis();
             gpGraph = group
                 .append("g")
-                .attr("class", "VTL-graph");              
+                .attr("class", "VTL-graph");
+
+            // add brush           
             if (brushEnabled)
                 addBrush();
 
+            // render graph
             switch(graphType) {
                 case "curve":
                     renderCurveGraph();
                     break;
-            }
-
-            switch(graphType) {
                 case "horizontalLine":
                     renderHorizontalLine();
                     break;
+            }
+
+            // 
+            if (valueHintEnabled) {
+                addValueHint();
             }
         }
 
@@ -178,14 +193,19 @@
                 .scale(yScale)
                 .orient(yAxisOrient)
 
-            group.append("g")
-                .attr("class", "VTL-axis")
-                .attr("transform", "translate(0," + graphSize.h + ")")
-                .call(xAxis);
-            group.append("g")
-                .attr("class", "VTL-axis")
-                .attr("transform", "translate(0, 0)")
-                .call(yAxis);
+            if (xAxisEnabled == true) {
+                group.append("g")
+                    .attr("class", "VTL-axis VTL-x-axis")
+                    .attr("transform", "translate(0," + graphSize.h + ")")
+                    .call(xAxis);                
+            }
+            if (yAxisEnabled == true) {
+                group.append("g")
+                    .attr("class", "VTL-axis VTL-y-axis")
+                    .attr("transform", "translate(0, 0)")
+                    .call(yAxis);
+            }
+
         }
 
         function renderCurveGraph() {
@@ -208,20 +228,13 @@
             if (horizontalBandCount != null) {
                 tmpYScale = d3.scale.linear().domain([yMin, yMax]).range([graphSize.h * horizontalBandCount, 0]);
             }
-            
-
- 
-
             var line = d3.svg.line()
                 .x(function(d) { return xScale(d.x); })
                 .y(function(d) { return tmpYScale(d.y); })
-
             var area = d3.svg.area()
                     .x(line.x())
                     .y1(line.y())
                     .y0(tmpYScale(yMin));
-
-            
             for (var i = 0; i < horizontalBandCount; i++) {
                 var transY = graphSize.h * (horizontalBandCount - i - 1)
                 var clipId = randomString();
@@ -232,25 +245,13 @@
                     .attr("height", graphSize.h)
                     .attr("x", 0)
                     .attr("y", 0)
-                    // .attr("transform", "translate(0, " + 10 + ")")
                     .attr("transform", "translate(0, " + transY + ")");
-                // var bgClipId = randomString();
-                // gpGraph.append("clipPath")
-                //     .attr("id", "VTL-clip-" + bgClipId)
-                //     .append("rect")
-                //     .attr("width", graphSize.cw)
-                //     .attr("height", graphSize.ch)
-                //     .attr("x", 0)
-                //     .attr("y", 0)
-                //     .attr("clip-path", "url(#VTL-clip-" + clipId + ")")
                 gpGraph.append("path")
                     .datum(data)
                     .attr("class", "VTL-hzt-area-" + i)
                     .attr("d", area)
                     .attr("transform", "translate(0, -" + transY + ")")
-                    // .attr("transform", "translate(0, -" + 10 + ")")
                     .attr("clip-path", "url(#VTL-clip-" + clipId + ")")
-                    
             }
         }        
 
@@ -274,6 +275,33 @@
             }
         }
 
+        function addValueHint() {
+            gpHint = svg.append("g")
+                .attr("class", "VTL-hint")
+                .style("display", "none");
+            gpHint.append("text")
+                .attr("x", 9)
+                .attr("dy", ".35em");
+            gpHint.append("rect")
+                .attr("class", "VTL-hint-overlay")
+                .attr("width", graphSize.w)
+                .attr("height", graphSize.h)
+                .attr("x", 0)
+                .attr("y", 0)
+                // .on("mouseover", function() { gpHint.style("display", null); })
+                // .on("mouseout", function() { gpHint.style("display", "none"); })
+                .on("mousemove", mousemove);
+
+            function mousemove() {
+                var x0 = xScale.invert(d3.mouse(this)[0]);
+                // i = bisectDate(data, x0, 1),
+                // d0 = data[i - 1],
+                // d1 = data[i],
+                // d = x0 - d0.date > d1.date - x0 ? d1 : d0;
+                // focus.attr("transform", "translate(" + x(d.date) + "," + y(d.close) + ")");
+                // focus.select("text").text(formatCurrency(d.close));
+            }
+        }
 
         function computeGraphSize() {
             var width = $(container).width() - margin.left - margin.right,
