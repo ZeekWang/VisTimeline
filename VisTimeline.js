@@ -13,22 +13,31 @@
 
     VTL.create = function(userConfig) {
         var TL = function() {};
+        var duration = 1000;
         var config, container, margin, 
             containerSize, containerSize, graphSize, 
             graphType;
         var xAxisOrient, yAxisOrient;
         var xMin = null, xMax = null, yMin = null, yMax = null;
+        var xDataMin, xDataMax, yDataMin, yDataMax;
         var xScale, yScale;
+        var xTicksCount = 10, yTicksCount = 10;
+        var xTicksFormat = null, yTicksFormat = null
         var axisEnabled, brushEnabled, valueHintEnabled;
         var xAxisEnabled, yAxisEnabled;
         var svg, group, gpGraph, gpBrush, gpHint;
         var data;
         var brushEndCallback;
         var horizontalBandCount, horizontalHeight;
+        var gradientColor = function(t) {
+            return d3.hsl(150 + t * 90, 1, .5);
+        }
 
         init(userConfig);
 
         function init(userConfig) {
+
+
             container = null;
             axisEnabled = true;
             brushEnabled = false;
@@ -47,6 +56,7 @@
                 top: 0,
                 bottom: 0
             }
+
             config = {};
             // config = userConfig;
 
@@ -87,6 +97,14 @@
                 xAxisOrient = userConfig.xAxisOrient;
             if (userConfig.yAxisOrient != null) 
                 yAxisOrient = userConfig.yAxisOrient;
+            if (userConfig.xTicksCount != null)
+                xTicksCount = userConfig.xTicksCount;
+            if (userConfig.yTicksCount != null)
+                yTicksCount = userConfig.yTicksCount;
+            if (userConfig.xTicksFormat != null)
+                xTicksFormat = userConfig.xTicksFormat;
+            if (userConfig.yTicksCount != null)
+                yTicksFormat = userConfig.yTicksFormat;
             if (userConfig.horizontalBandCount != null) {
                 horizontalBandCount = userConfig.horizontalBandCount;
                 if (horizontalBandCount > 5) {
@@ -111,9 +129,15 @@
                 .append("g")
                 .attr("class", "VTL-graph");
 
+
+
             // add brush           
             if (brushEnabled)
                 addBrush();
+
+            if (valueHintEnabled) {
+                addValueHint();
+            }            
 
             // render graph
             switch(graphType) {
@@ -123,12 +147,13 @@
                 case "horizontalLine":
                     renderHorizontalLine();
                     break;
+                case "band":
+                    renderBandGraph();
+                    break;
+                default:
+                    break;
             }
 
-            // 
-            if (valueHintEnabled) {
-                addValueHint();
-            }
         }
 
         TL.setData = function(userData) {
@@ -142,7 +167,8 @@
         }
 
         function createSVG() {
-            svg = d3.select(container).append("svg");
+            svg = d3.select(container).append("svg")
+                .attr("class", "VTL-SVG-wrapper");
             group = svg
                 .attr("width", graphSize.w + margin.left + margin.right)
                 .attr("height", graphSize.h + margin.top + margin.bottom)
@@ -152,46 +178,57 @@
         }
 
         function processData() {
+            var tmpXMin = Number.MAX_VALUE;
+            var tmpXMax = Number.MIN_VALUE;
+            for (var i = 0; i < data.length; i++) {
+                if (tmpXMin > data[i].x)
+                    tmpXMin = data[i].x;
+                if (tmpXMax < data[i].x)
+                    tmpXMax = data[i].x;
+            }
+            xDataMax = tmpXMax;
+            xDataMin = tmpXMin;
             if (xMin == null || xMax == null) {
-                tmpXMin = Number.MAX_VALUE;
-                tmpXMax = Number.MIN_VALUE;
-                for (var i = 0; i < data.length; i++) {
-                    if (tmpXMin > data[i].x)
-                        tmpXMin = data[i].x;
-                    if (tmpXMax < data[i].x)
-                        tmpXMax = data[i].x;
-                }
                 if (xMin == null)
                     xMin = tmpXMin;
                 if (xMax == null)
                     xMax = tmpXMax;
             }
+
+            var tmpYMin = Number.MAX_VALUE;
+            var tmpYMax = Number.MIN_VALUE;
+            for (var i = 0; i < data.length; i++) {
+                if (tmpYMin > data[i].y)
+                    tmpYMin = data[i].y;
+                if (tmpYMax < data[i].y)
+                    tmpYMax = data[i].y;
+            }
+            yDataMax = tmpYMax;
+            yDataMin = tmpYMin;         
             if (yMin == null || yMax == null) {
-                tmpYMin = Number.MAX_VALUE;
-                tmpYMax = Number.MIN_VALUE;
-                for (var i = 0; i < data.length; i++) {
-                    if (tmpYMin > data[i].y)
-                        tmpYMin = data[i].y;
-                    if (tmpYMax < data[i].y)
-                        tmpYMax = data[i].y;
-                }
                 if (yMin == null)
                     yMin = tmpYMin;
                 if (yMax == null)
                     yMax = tmpYMax;
             }            
             xScale = d3.scale.linear().domain([xMin, xMax]).range([0, graphSize.w]);
-            yScale = d3.scale.linear().domain([yMin, yMax]).range([graphSize.h, 0]);            
-
+            yScale = d3.scale.linear().domain([yMin, yMax]).range([graphSize.h, 0]);
         }
 
         function renderAxis() {
             var xAxis = d3.svg.axis()
                 .scale(xScale)
                 .orient(xAxisOrient)
+                .ticks(xTicksCount)
+            if (xTicksFormat != null)
+                xAxis.ticks(xTicksCount, xTicksFormat);
+
             var yAxis = d3.svg.axis()
                 .scale(yScale)
                 .orient(yAxisOrient)
+                .ticks(yTicksCount)
+            if (xTicksFormat != null)
+                yAxis.ticks(yTicksCount, yTicksFormat);
 
             if (xAxisEnabled == true) {
                 group.append("g")
@@ -205,23 +242,67 @@
                     .attr("transform", "translate(0, 0)")
                     .call(yAxis);
             }
-
         }
+
+
 
         function renderCurveGraph() {
             var line = d3.svg.line()
                 .x(function(d) { return xScale(d.x); })
                 .y(function(d) { return yScale(d.y); });
 
+            var initArea = d3.svg.area()
+                    .x(line.x())
+                    .y1(yScale(yMin))
+                    .y0(yScale(yMin));
+
+            var areaElement = gpGraph.append("path")
+                .datum(data)
+                .attr("class", "VTL-area")
+                .attr("d", initArea);
+
             var area = d3.svg.area()
                     .x(line.x())
                     .y1(line.y())
                     .y0(yScale(yMin));
 
-            gpGraph.append("path")
-                .datum(data)
-                .attr("class", "VTL-area")
+            areaElement.transition()
+                .duration(duration)
                 .attr("d", area);
+        }
+
+        function renderBandGraph() {
+            var gradientId = randomString();
+            var gradient = gpGraph.append("defs")
+                .append("linearGradient")
+                .attr("id", "VTL-gradient-" + gradientId)
+                .attr("x1", "0%")
+                .attr("y1", "0%")
+                .attr("x2", "100%")
+                .attr("y2", "0%")
+            gradient.selectAll("stop")
+                .data(data).enter()
+                .append("stop")
+                .attr("offset", function(d) {
+                    var p = map(d.x, xDataMin, xDataMax, 0, 100);
+                    return p + "%";
+                })
+                .attr("style", function(d) {
+                    var p = map(d.y, yDataMin, yDataMax, 0, 1);
+                    hsl = gradientColor(p);
+                    return "stop-color:" + hsl.rgb().toString();
+                });
+
+            var bandElement = gpGraph.append("rect")
+                .attr("width", 0)
+                .attr("height", graphSize.h)
+                .attr("class", "VTL-area")
+                .style("fill", "url(#VTL-gradient-" + gradientId + ")");
+            bandElement.transition()
+                .duration(duration)
+                .attr("width", graphSize.w)
+
+
         }
 
         function renderHorizontalLine() {
@@ -231,6 +312,11 @@
             var line = d3.svg.line()
                 .x(function(d) { return xScale(d.x); })
                 .y(function(d) { return tmpYScale(d.y); })
+
+            var initArea = d3.svg.area()
+                    .x(line.x())
+                    .y1(tmpYScale(yMin))
+                    .y0(tmpYScale(yMin));
             var area = d3.svg.area()
                     .x(line.x())
                     .y1(line.y())
@@ -246,12 +332,16 @@
                     .attr("x", 0)
                     .attr("y", 0)
                     .attr("transform", "translate(0, " + transY + ")");
-                gpGraph.append("path")
+                var areaElement = gpGraph.append("path")
                     .datum(data)
                     .attr("class", "VTL-hzt-area-" + i)
-                    .attr("d", area)
+                    .attr("d", initArea)
                     .attr("transform", "translate(0, -" + transY + ")")
                     .attr("clip-path", "url(#VTL-clip-" + clipId + ")")
+
+                areaElement.transition()
+                    .duration(duration)
+                    .attr("d", area);
             }
         }        
 
@@ -276,9 +366,9 @@
         }
 
         function addValueHint() {
-            gpHint = svg.append("g")
+            gpHint = group.append("g")
                 .attr("class", "VTL-hint")
-                .style("display", "none");
+                // .style("display", "none");
             gpHint.append("text")
                 .attr("x", 9)
                 .attr("dy", ".35em");
@@ -288,20 +378,22 @@
                 .attr("height", graphSize.h)
                 .attr("x", 0)
                 .attr("y", 0)
+                .attr("fill", "transparent")
                 // .on("mouseover", function() { gpHint.style("display", null); })
                 // .on("mouseout", function() { gpHint.style("display", "none"); })
-                .on("mousemove", mousemove);
-
-            function mousemove() {
-                var x0 = xScale.invert(d3.mouse(this)[0]);
-                // i = bisectDate(data, x0, 1),
-                // d0 = data[i - 1],
-                // d1 = data[i],
-                // d = x0 - d0.date > d1.date - x0 ? d1 : d0;
-                // focus.attr("transform", "translate(" + x(d.date) + "," + y(d.close) + ")");
-                // focus.select("text").text(formatCurrency(d.close));
-            }
+                .on("mousemove", valueHintMouseMove);
         }
+
+        function valueHintMouseMove() {
+            var x0 = xScale.invert(d3.mouse(this)[0]);
+            console.log("mousemove:" + x0);
+            // i = bisectDate(data, x0, 1),
+            // d0 = data[i - 1],
+            // d1 = data[i],
+            // d = x0 - d0.date > d1.date - x0 ? d1 : d0;
+            // focus.attr("transform", "translate(" + x(d.date) + "," + y(d.close) + ")");
+            // focus.select("text").text(formatCurrency(d.close));
+        }        
 
         function computeGraphSize() {
             var width = $(container).width() - margin.left - margin.right,
