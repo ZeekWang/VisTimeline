@@ -27,10 +27,10 @@
         var xAxisEnabled, yAxisEnabled;
         var svg, group, gpGraph, gpBrush, gpHint;
         var data;
-        var brushEndCallback;
+        var brush, brushEndCallback;
         var horizontalBandCount, horizontalHeight;
         var gradientColor = function(t) {
-            return d3.hsl(150 + t * 90, 1, .5);
+            return d3.hsl(150 + t * 60, 0.566, 0.629);
         }
 
         init(userConfig);
@@ -129,8 +129,6 @@
                 .append("g")
                 .attr("class", "VTL-graph");
 
-
-
             // add brush           
             if (brushEnabled)
                 addBrush();
@@ -153,8 +151,32 @@
                 default:
                     break;
             }
-
         }
+
+        TL.resize = function() {
+            computeGraphSize();
+            svg
+                .attr("width", graphSize.w + margin.left + margin.right)
+                .attr("height", graphSize.h + margin.top + margin.bottom);
+            processData();
+            if (axisEnabled)
+                renderAxis(true);
+
+            // render graph
+            switch(graphType) {
+                case "curve":
+                    renderCurveGraph(true);
+                    break;
+                case "horizontalLine":
+                    renderHorizontalLine(true);
+                    break;
+                case "band":
+                    renderBandGraph(true);
+                    break;
+                default:
+                    break;
+            }
+        }        
 
         TL.setData = function(userData) {
             data = userData;
@@ -164,6 +186,23 @@
         TL.setBrushEndCallback = function(func) {
             brushEndCallback = func;
             return TL;
+        }
+
+        TL.setBrushRange = function(x0, x1) {
+            var xPos0 = Math.round(xScale(x0));
+            var xPos1 = Math.round(xScale(x1));
+            var h = $(container).find(".VTL-brush background")
+                .attr("height");
+            $(container).find(".VTL-brush .extent")
+                .attr("x", xPos0)
+                .attr("width", xPos1 - xPos0)
+                .attr("height", h);
+            $(container).find(".VTL-brush .w")
+                .attr("transform","translate(" + xPos0 + ",0)");
+            $(container).find(".VTL-brush .e")
+                .attr("transform","translate(" + xPos1 +",0)");
+            brush.extent([x0, x1]);
+
         }
 
         function createSVG() {
@@ -215,7 +254,7 @@
             yScale = d3.scale.linear().domain([yMin, yMax]).range([graphSize.h, 0]);
         }
 
-        function renderAxis() {
+        function renderAxis(isUpdate) {
             var xAxis = d3.svg.axis()
                 .scale(xScale)
                 .orient(xAxisOrient)
@@ -230,23 +269,38 @@
             if (xTicksFormat != null)
                 yAxis.ticks(yTicksCount, yTicksFormat);
 
-            if (xAxisEnabled == true) {
-                group.append("g")
-                    .attr("class", "VTL-axis VTL-x-axis")
-                    .attr("transform", "translate(0," + graphSize.h + ")")
-                    .call(xAxis);                
+            if (isUpdate != true) {
+                if (xAxisEnabled == true) {
+                    group.append("g")
+                        .attr("class", "VTL-axis VTL-x-axis")
+                        .attr("transform", "translate(0," + graphSize.h + ")")
+                        .call(xAxis);
+                }
+                if (yAxisEnabled == true) {
+                    group.append("g")
+                        .attr("class", "VTL-axis VTL-y-axis")
+                        .attr("transform", "translate(0, 0)")
+                        .call(yAxis);
+                }
+
             }
-            if (yAxisEnabled == true) {
-                group.append("g")
-                    .attr("class", "VTL-axis VTL-y-axis")
-                    .attr("transform", "translate(0, 0)")
-                    .call(yAxis);
+            else {
+                if (xAxisEnabled == true) {
+                    group.select(".VTL-x-axis")
+                        .attr("transform", "translate(0," + graphSize.h + ")")
+                        .call(xAxis);
+                }
+                if (yAxisEnabled == true) {
+                    group.select(".VTL-y-axis")
+                        .attr("transform", "translate(0, 0)")
+                        .call(yAxis);
+                }                
             }
         }
 
 
 
-        function renderCurveGraph() {
+        function renderCurveGraph(isUpdate) {
             var line = d3.svg.line()
                 .x(function(d) { return xScale(d.x); })
                 .y(function(d) { return yScale(d.y); });
@@ -256,22 +310,27 @@
                     .y1(yScale(yMin))
                     .y0(yScale(yMin));
 
-            var areaElement = gpGraph.append("path")
-                .datum(data)
-                .attr("class", "VTL-area")
-                .attr("d", initArea);
-
             var area = d3.svg.area()
                     .x(line.x())
                     .y1(line.y())
-                    .y0(yScale(yMin));
+                    .y0(yScale(yMin));                    
 
-            areaElement.transition()
-                .duration(duration)
-                .attr("d", area);
+            if (isUpdate != true) {
+                var areaElement = gpGraph.append("path")
+                    .datum(data)
+                    .attr("class", "VTL-area")
+                    .attr("d", initArea);
+
+                areaElement.transition()
+                    .duration(duration)
+                    .attr("d", area);
+            } else {
+                gpGraph.select(".VTL-area")
+                    .attr("d", area);
+            }
         }
 
-        function renderBandGraph() {
+        function renderBandGraph(isUpdate) {
             var gradientId = randomString();
             var gradient = gpGraph.append("defs")
                 .append("linearGradient")
@@ -290,22 +349,30 @@
                 .attr("style", function(d) {
                     var p = map(d.y, yDataMin, yDataMax, 0, 1);
                     hsl = gradientColor(p);
-                    return "stop-color:" + hsl.rgb().toString();
+                    // return "stop-color:" + hsl.rgb().toString();
+                    return "stop-color:rgba(107,174,214," + p + ")";
                 });
 
-            var bandElement = gpGraph.append("rect")
-                .attr("width", 0)
-                .attr("height", graphSize.h)
-                .attr("class", "VTL-area")
-                .style("fill", "url(#VTL-gradient-" + gradientId + ")");
-            bandElement.transition()
-                .duration(duration)
-                .attr("width", graphSize.w)
+            if (isUpdate != true) {
+                var bandElement = gpGraph.append("rect")
+                    .attr("width", graphSize.w)
+                    .attr("height", 0)
+                    .attr("class", "VTL-area")
+                    .style("fill", "url(#VTL-gradient-" + gradientId + ")");
+                bandElement.transition()
+                    .duration(duration)
+                    .attr("height", graphSize.h)
+            } else {
+                gpGraph.select(".VTL-area")
+                    .attr("width", graphSize.w)
+                    .attr("height", graphSize.h);
+            }
+
 
 
         }
 
-        function renderHorizontalLine() {
+        function renderHorizontalLine(isUpdate) {
             if (horizontalBandCount != null) {
                 tmpYScale = d3.scale.linear().domain([yMin, yMax]).range([graphSize.h * horizontalBandCount, 0]);
             }
@@ -321,28 +388,42 @@
                     .x(line.x())
                     .y1(line.y())
                     .y0(tmpYScale(yMin));
-            for (var i = 0; i < horizontalBandCount; i++) {
-                var transY = graphSize.h * (horizontalBandCount - i - 1)
-                var clipId = randomString();
-                gpGraph.append("clipPath")
-                    .attr("id", "VTL-clip-" + clipId)
-                    .append("rect")
-                    .attr("width", graphSize.w)
-                    .attr("height", graphSize.h)
-                    .attr("x", 0)
-                    .attr("y", 0)
-                    .attr("transform", "translate(0, " + transY + ")");
-                var areaElement = gpGraph.append("path")
-                    .datum(data)
-                    .attr("class", "VTL-hzt-area-" + i)
-                    .attr("d", initArea)
-                    .attr("transform", "translate(0, -" + transY + ")")
-                    .attr("clip-path", "url(#VTL-clip-" + clipId + ")")
 
-                areaElement.transition()
-                    .duration(duration)
+            if (isUpdate != true) {
+                for (var i = 0; i < horizontalBandCount; i++) {
+                    var transY = graphSize.h * (horizontalBandCount - i - 1)
+                    var clipId = randomString();
+                    gpGraph.append("clipPath")
+                        .attr("class", "VTL-clip-area")
+                        .attr("id", "VTL-clip-" + clipId)
+                        .append("rect")
+                        .attr("width", graphSize.w)
+                        .attr("height", graphSize.h)
+                        .attr("x", 0)
+                        .attr("y", 0)
+                        .attr("transform", "translate(0, " + transY + ")");
+                    var areaElement = gpGraph.append("path")
+                        .datum(data)
+                        .attr("class", "VTL-hzt-area VTL-hzt-area-" + i)
+                        .attr("d", initArea)
+                        .attr("transform", "translate(0, -" + transY + ")")
+                        .attr("clip-path", "url(#VTL-clip-" + clipId + ")")
+
+                    areaElement.transition()
+                        .duration(duration)
+                        .attr("d", area);
+                }
+            } else {
+                //#注意调节高度
+                gpGraph.selectAll(".VTL-clip-area rect")
+                    .attr("width", graphSize.w)
+                    .attr("height", graphSize.h);
+                gpGraph.selectAll(".VTL-hzt-area")
                     .attr("d", area);
             }
+
+
+
         }        
 
         function addBrush() {
@@ -360,6 +441,7 @@
 
             function funcBrushEnd(x0, x1) {
                 extent = brush.extent();
+                console.log("brushend:" +  " " + extent);
                 if (brushEndCallback != null)
                     brushEndCallback(extent[0], extent[1]);
             }
@@ -381,6 +463,7 @@
                 .attr("fill", "transparent")
                 // .on("mouseover", function() { gpHint.style("display", null); })
                 // .on("mouseout", function() { gpHint.style("display", "none"); })
+                .style("pointer-events", "none")
                 .on("mousemove", valueHintMouseMove);
         }
 
